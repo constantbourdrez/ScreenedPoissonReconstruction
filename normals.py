@@ -46,13 +46,15 @@ def compute_local_PCA(
     nghbrd_search: str = "spherical",
     radius: Optional[float] = None,
     k: Optional[int] = None,
+    d: int = 2,
+    reference_direction: Optional[np.ndarray] = np.array([1, 0]),  # x-axis as a reference
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Computes PCA on the neighborhoods of all query_points in cloud_points.
 
     Returns:
-        all_eigenvalues: (N, 3)-array of the eigenvalues associated with each query point.
-        all_eigenvectors: (N, 3, 3)-array of the eigenvectors associated with each query point.
+        all_eigenvalues: (N, 2)-array of the eigenvalues associated with each query point.
+        all_eigenvectors: (N, 2, 2)-array of the eigenvectors associated with each query point.
     """
 
     kdtree = KDTree(cloud_points)
@@ -72,20 +74,19 @@ def compute_local_PCA(
             f"Standard deviation: {np.std(neighborhood_sizes):.4f}\n"
             f"Min: {np.min(neighborhood_sizes)}, max: {np.max(neighborhood_sizes)}\n"
         )
-        hist_values, _, __ = plt.hist(neighborhood_sizes, bins="auto", color="darkgreen")
-        plt.title(
-            f"Histogram of the neighborhood sizes"
-        )
-        plt.xlabel("Neighborhood size")
-        plt.ylabel("Number of neighborhoods")
-        plt.grid(True)
-        plt.tight_layout()
-        plt.show()
 
     all_eigenvalues = np.zeros((query_points.shape[0], d))
     all_eigenvectors = np.zeros((query_points.shape[0], d, d))
 
     for i, point in enumerate(query_points):
-        all_eigenvalues[i], all_eigenvectors[i] = PCA(cloud_points[neighborhoods[i]])
+        eigenvalues, eigenvectors = PCA(cloud_points[neighborhoods[i]])
+
+        # In 2D, the eigenvector associated with the smallest eigenvalue is the normal.
+        # Ensure the normal is oriented consistently with the reference direction.
+        if np.dot(eigenvectors[:, 0], reference_direction) < 0:
+            eigenvectors[:, 0] = -eigenvectors[:, 0]
+
+        all_eigenvalues[i] = eigenvalues
+        all_eigenvectors[i] = eigenvectors
 
     return all_eigenvalues, all_eigenvectors
