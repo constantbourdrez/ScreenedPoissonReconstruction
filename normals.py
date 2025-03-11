@@ -42,6 +42,7 @@ def PCA(points: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 def compute_local_PCA(
     query_points: np.ndarray,
     cloud_points: np.ndarray,
+    d: int = 3,
     nghbrd_search: str = "spherical",
     radius: Optional[float] = None,
     k: Optional[int] = None,
