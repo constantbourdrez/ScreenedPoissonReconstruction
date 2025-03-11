@@ -42,6 +42,7 @@ def PCA(points: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 def compute_local_PCA(
     query_points: np.ndarray,
     cloud_points: np.ndarray,
+    d: int = 3,
     nghbrd_search: str = "spherical",
     radius: Optional[float] = None,
     k: Optional[int] = None,
@@ -81,8 +82,8 @@ def compute_local_PCA(
         plt.tight_layout()
         plt.show()
 
-    all_eigenvalues = np.zeros((query_points.shape[0], 3))
-    all_eigenvectors = np.zeros((query_points.shape[0], 3, 3))
+    all_eigenvalues = np.zeros((query_points.shape[0], d))
+    all_eigenvectors = np.zeros((query_points.shape[0], d, d))
 
     for i, point in enumerate(query_points):
         all_eigenvalues[i], all_eigenvectors[i] = PCA(cloud_points[neighborhoods[i]])
