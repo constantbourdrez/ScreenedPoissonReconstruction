@@ -42,12 +42,11 @@ def PCA(points: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 def compute_local_PCA(
     query_points: np.ndarray,
     cloud_points: np.ndarray,
-    d: int = 3,
     nghbrd_search: str = "spherical",
     radius: Optional[float] = None,
     k: Optional[int] = None,
     d: int = 2,
-    reference_direction: Optional[np.ndarray] = np.array([1, 0]),  # x-axis as a reference
+    reference_direction: Optional[np.ndarray] = np.array([-1, -1]),  # x-axis as a reference
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Computes PCA on the neighborhoods of all query_points in cloud_points.
@@ -65,7 +64,7 @@ def compute_local_PCA(
         if nghbrd_search.lower() == "knn"
         else None
     )
-
+    centroid = cloud_points.mean(axis=0)
     # checking the sizes of the neighborhoods and plotting the histogram
     if nghbrd_search.lower() == "spherical":
         neighborhood_sizes = [neighborhood.shape[0] for neighborhood in neighborhoods]
@@ -80,11 +79,13 @@ def compute_local_PCA(
 
     for i, point in enumerate(query_points):
         eigenvalues, eigenvectors = PCA(cloud_points[neighborhoods[i]])
+        normal = eigenvectors[:, 0]  # Smallest eigenvalue corresponds to the normal
 
-        # In 2D, the eigenvector associated with the smallest eigenvalue is the normal.
-        # Ensure the normal is oriented consistently with the reference direction.
-        if np.dot(eigenvectors[:, 0], reference_direction) < 0:
-            eigenvectors[:, 0] = -eigenvectors[:, 0]
+        # Ensure the normal points outward from the centroid
+        reference_direction = point - centroid
+        if np.dot(normal, reference_direction) < 0:
+            normal = -normal
+            eigenvectors[:, 0] = normal
 
         all_eigenvalues[i] = eigenvalues
         all_eigenvectors[i] = eigenvectors
