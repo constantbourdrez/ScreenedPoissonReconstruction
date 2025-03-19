@@ -83,7 +83,7 @@ def compute_local_PCA(
 
         # Ensure the normal points outward from the centroid
         reference_direction = point - centroid
-        if np.dot(normal, reference_direction) < 0:
+        if np.dot(normal, reference_direction) > 0:
             normal = -normal
             eigenvectors[:, 0] = normal
 
