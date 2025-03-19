@@ -213,12 +213,13 @@ def solve_multilevel_system(A_blocks, b_levels, nodes_by_depth):
     return x_levels
 
 # ---------------------- Implicit Function Evaluation (Vectorized) ----------------------
-def evaluate_implicit_function(octree, x_levels, nodes_by_depth, eval_points, dimension):
+def evaluate_implicit_function(octree, x_levels, nodes_by_depth, eval_points, points, dimension):
     """
     Evaluate the implicit function χ(p) = sum_d sum_i x_i^d B_i^d(p)
     at many evaluation points.
     """
     values = np.zeros(eval_points.shape[0])
+    control = np.zeros(points.shape[0])
     for d, nodes in nodes_by_depth.items():
         #print('depth:', d)
         centers = np.array([node.center for node in nodes])
@@ -226,11 +227,15 @@ def evaluate_implicit_function(octree, x_levels, nodes_by_depth, eval_points, di
         half_extents = sizes / 2.0
         E = vectorized_bspline_eval(centers, half_extents, eval_points)  # (N, P)
         #print('B-spline shape:', E.shape)
+        B = vectorized_bspline_eval(centers, half_extents, points)  # (N, P)
         values += np.sum(x_levels[d][:, None] * E, axis=0)
-    return values
+        control += np.sum(x_levels[d][:, None] * B, axis=0)
+
+    offset = np.mean(control)
+    return values - offset
 
 # ---------------------- Plotting for 2D ----------------------
-def plot_implicit_function_2D(octree, x_levels, nodes_by_depth, points, dimension, normals=None, eval_resolution=200):
+def plot_implicit_function_2D(octree, x_levels, nodes_by_depth, points, dimension, normals=None, eval_resolution=100):
     # Create evaluation grid.
     x_min, y_min = np.min(points, axis=0) - np.array([0.5, 0.5])
     x_max, y_max = np.max(points, axis=0) + np.array([0.5, 0.5])
@@ -239,17 +244,14 @@ def plot_implicit_function_2D(octree, x_levels, nodes_by_depth, points, dimensio
     grid_points = np.column_stack([xx.ravel(), yy.ravel()])
 
     # Evaluate the implicit function.
-    implicit_values = evaluate_implicit_function(octree, x_levels, nodes_by_depth, grid_points, dimension)
+    implicit_values = evaluate_implicit_function(octree, x_levels, nodes_by_depth, grid_points, points, dimension)
     implicit_grid = implicit_values.reshape(xx.shape)
-
-    control_values = evaluate_implicit_function(octree, x_levels, nodes_by_depth, points, dimension)
-    print('Mean values at source points:', control_values.mean())
 
     # Plot the implicit function (left) and the point cloud with the octree structure (right).
     fig, ax = plt.subplots(1, 2, figsize=(12, 6))
 
     # Left: Contour plot of the implicit function.
-    contour = ax[0].contourf(xx, yy, implicit_grid - control_values.mean(), cmap='viridis', extent=(-10., 10., -10., 10.))
+    contour = ax[0].contourf(xx, yy, implicit_grid, cmap='viridis', extent=(-10., 10., -10., 10.))
     fig.colorbar(contour, ax=ax[0], label='Implicit Function Value')
     ax[0].set_title('Implicit Function')
     ax[0].set_xlabel('X')
@@ -296,9 +298,9 @@ def main():
 
     bbox_min = np.min(points, axis=0) - 0.5
     bbox_max = np.max(points, axis=0) + 0.5
-    max_depth = 7    # maximum tree depth
+    max_depth = 8   # maximum tree depth
     density_threshold = 0.1
-    alpha = 1              # screening parameter
+    alpha = 1.          # screening parameter
 
     # Build the adaptive octree.
     octree = Octree(bbox_min, bbox_max, max_depth, points, density_threshold, dimension)
