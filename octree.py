@@ -23,6 +23,12 @@ class OctreeNode:
                 OctreeNode(self.center + np.array(offset) * half_size, half_size, self.depth + 1)
                 for offset in offsets
             ]
+    def contains(self, point):
+        """
+        Check if the given point is within the bounds of this node.
+        """
+        half_size = self.size / 2.0
+        return all(abs(point[i] - self.center[i]) <= half_size for i in range(len(point)))
 
 class Octree:
     def __init__(self, bbox_min, bbox_max, max_depth, points, density_threshold, dimension):
@@ -43,7 +49,8 @@ class Octree:
             node.point_count = np.sum(mask)
             area = node.size**self.dimension
             density = node.point_count / area if area > 0 else 0
-            if node.depth < self.max_depth and density > self.density_threshold:
+            print(node.depth, density)
+            if node.depth < self.max_depth and node.point_count > 1:
                 node.subdivide(self.dimension)
                 nodes_to_check.extend(node.children)
 
