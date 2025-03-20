@@ -13,10 +13,32 @@ def vectorized_bspline_eval(centers, half_extents, points):
     diff = points[None, :, :] - centers[:, None, :]
     # Normalize by half_extent (reshaped for broadcasting)
     half_extents_reshaped = half_extents[:, None, None]
-    diff_scaled = diff / (3. * half_extents_reshaped)
+    diff_scaled = diff / (2. * half_extents_reshaped) #scaled by the size of the node
+
+    def f(x):
+        #print(x)
+        if x < 0:
+            return f(-x)
+        elif x >= 1.5:
+            return 0.
+        elif x >= 0.5:
+            return (x - 1.5)**2 / 2.
+        else:
+            return - x**2 + 0.75
+        
+    #vals = np.maximum(0.5, - diff_scaled**2 + 0.75)  # shape (N, P, d)
+    #vals = np.minimum(vals, (diff_scaled - 1.5)**2 / 2.)
+
     # 1D quadratic B-spline: f(t) = max(0, 1 - t^2)
-    vals = np.maximum(0, 1 - diff_scaled**2)  # shape (N, P, d)
-    return np.prod(vals, axis=2)
+    #vals = f(diff_scaled)  # shape (N, P, d)
+
+    vals = np.zeros(diff_scaled.shape)
+    for i in range(diff_scaled.shape[0]):
+        for j in range(diff_scaled.shape[1]):
+            vals[i,j,0] = f(diff_scaled[i,j,0])
+            vals[i,j,1] = f(diff_scaled[i,j,1])
+
+    return np.prod(vals, axis=2) #we multiply the two 1D B-splines to get the 2D B-spline
 
 def vectorized_bspline_gradient(centers, half_extents, points):
     """
@@ -31,23 +53,34 @@ def vectorized_bspline_gradient(centers, half_extents, points):
     P = points.shape[0]
     diff = points[None, :, :] - centers[:, None, :]  # (N, P, d)
     half_extents_reshaped = half_extents[:, None, None]  # (N, 1, 1)
-    diff_scaled = diff / (3. * half_extents_reshaped)  # (N, P, d)
+    diff_scaled = diff / (2. * half_extents_reshaped)  # (N, P, d)
     # Compute the 1D factors f(t) = max(0, 1 - t^2) for each dimension.
-    f = np.maximum(0, 1 - diff_scaled**2)  # (N, P, d)
-    prod_all = np.prod(f, axis=2)  # (N, P)
-    grad = np.zeros((N, P, d))
-    for k in range(d):
-        f_k = f[:, :, k]  # (N, P)
-        # Derivative of (1 - t^2) is -2*t (only valid for |t| < 1).
-        # Reshape half_extents to (N, 1) to broadcast over P.
-        with np.errstate(divide='ignore', invalid='ignore'):
-            factor = np.where(np.abs(diff_scaled[:, :, k]) < 1,
-                              -2 * diff_scaled[:, :, k] / (3. * half_extents[:, None]),
-                              0)
-        # Compute product over all dimensions except k.
-        with np.errstate(divide='ignore', invalid='ignore'):
-            ratio = np.true_divide(prod_all, f_k)
-            ratio[~np.isfinite(ratio)] = 0  # replace NaNs and infs with 0.
-        prod_except = ratio
-        grad[:, :, k] = factor * prod_except
+
+    def f(x):
+        #print(x)
+        if x < 0:
+            return f(-x)
+        elif x >= 1.5:
+            return 0.
+        elif x >= 0.5:
+            return (x - 1.5)**2 / 2.
+        else:
+            return - x**2 + 0.75
+    
+    def grad_f(x):
+        if x < 0:
+            return - grad_f(-x)
+        elif x >= 1.5:
+            return 0.
+        elif x >= 0.5:
+            return x - 1.5
+        else:
+            return - 2 * x
+
+    grad = np.zeros(diff_scaled.shape)
+
+    for i in range(diff_scaled.shape[0]):
+        for j in range(diff_scaled.shape[1]):
+                grad[i,j,0] = grad_f(diff_scaled[i,j,0]) * f(diff_scaled[i,j,1]) / (2. * half_extents[i])
+                grad[i,j,1] = f(diff_scaled[i,j,0]) * grad_f(diff_scaled[i,j,1]) / (2. * half_extents[i])
     return grad

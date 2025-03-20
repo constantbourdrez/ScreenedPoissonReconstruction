@@ -90,11 +90,11 @@ def main():
     normals = compute_local_PCA(points, points, radius=2)[1][:, :, 0]
     normals = normals / np.linalg.norm(normals, axis=1, keepdims=True)
 
-    bbox_min = np.min(points, axis=0) - 0.5
-    bbox_max = np.max(points, axis=0) + 0.5
-    max_depth = 8   # maximum tree depth
+    bbox_min = 2*np.min(points, axis=0)
+    bbox_max = 2*np.max(points, axis=0)
+    max_depth = 7   # maximum tree depth
     density_threshold = 0.1
-    alpha = 1.          # screening parameter
+    alpha = 4.          # screening parameter
 
     # Build the adaptive octree.
     octree = Octree(bbox_min, bbox_max, max_depth, points, density_threshold, dimension)

@@ -2,7 +2,7 @@ import numpy as np
 from b_spline import vectorized_bspline_eval, vectorized_bspline_gradient
 from octree import collect_nodes_by_depth
 
-def build_multilevel_system(octree, alpha, dimension, points, V_field, area):
+def build_multilevel_system(octree, alpha, dimension, points, V_field):
     """
     Assemble the system matrices A and right-hand side vectors b per level.
 
@@ -50,7 +50,7 @@ def build_multilevel_system(octree, alpha, dimension, points, V_field, area):
     grid = np.meshgrid(*grid_axes, indexing='ij')
     grid = np.stack(grid, axis=-1).reshape(-1, dimension)
 
-    point_weight = area / len(points)
+    #point_weight = area / len(points)
     max_depth = max(depths)
 
     # Pré-calcul des centres et demi-extensions pour chaque niveau.
