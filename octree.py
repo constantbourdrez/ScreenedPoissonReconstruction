@@ -49,7 +49,6 @@ class Octree:
             node.point_count = np.sum(mask)
             area = node.size**self.dimension
             density = node.point_count / area if area > 0 else 0
-            print(node.depth, density)
             if node.depth < self.max_depth and node.point_count > 1:
                 node.subdivide(self.dimension)
                 nodes_to_check.extend(node.children)
