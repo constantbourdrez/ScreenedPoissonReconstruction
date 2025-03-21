@@ -1,86 +1,88 @@
 import numpy as np
 
-# ---------------------- Vectorized B-Spline Basis Functions ----------------------
 def vectorized_bspline_eval(centers, half_extents, points):
     """
-    Evaluate quadratic B-spline basis functions at many points.
-    centers: (N, d) array for N nodes
-    half_extents: (N,) array (each = size/2)
-    points: (P, d) array of evaluation points
+    Evaluate quadratic B-spline basis functions at many points in 2D.
+    centers: (N, 2) array for N nodes.
+    half_extents: (N,) array (each = size/2).
+    points: (P, 2) array of evaluation points.
     Returns: (N, P) array where entry [i, p] = basis_i(points[p])
     """
-    # Compute differences: shape (N, P, d)
+    # Compute differences: shape (N, P, 2)
     diff = points[None, :, :] - centers[:, None, :]
-    # Normalize by half_extent (reshaped for broadcasting)
-    half_extents_reshaped = half_extents[:, None, None]
-    diff_scaled = diff / (2. * half_extents_reshaped) #scaled by the size of the node
+    # Normalize by half_extents (reshaped for broadcasting)
+    diff_scaled = diff / (2.0 * half_extents[:, None, None])
 
-    def f(x):
-        #print(x)
-        if x < 0:
-            return f(-x)
-        elif x >= 1.5:
-            return 0.
-        elif x >= 0.5:
-            return (x - 1.5)**2 / 2.
-        else:
-            return - x**2 + 0.75
-        
-    #vals = np.maximum(0.5, - diff_scaled**2 + 0.75)  # shape (N, P, d)
-    #vals = np.minimum(vals, (diff_scaled - 1.5)**2 / 2.)
+    # Use absolute value since the function is even: f(x) = f(|x|)
+    abs_diff = np.abs(diff_scaled)
 
-    # 1D quadratic B-spline: f(t) = max(0, 1 - t^2)
-    #vals = f(diff_scaled)  # shape (N, P, d)
+    # Vectorized definition of f:
+    # If abs_diff >= 1.5, value is 0.
+    # If 0.5 <= abs_diff < 1.5, value is ((abs_diff - 1.5)**2) / 2.
+    # Otherwise, value is -abs_diff**2 + 0.75.
+    f_vals = np.where(
+        abs_diff >= 1.5,
+        0.0,
+        np.where(
+            abs_diff >= 0.5,
+            ((abs_diff - 1.5)**2) / 2.0,
+            -abs_diff**2 + 0.75
+        )
+    )
 
-    vals = np.zeros(diff_scaled.shape)
-    for i in range(diff_scaled.shape[0]):
-        for j in range(diff_scaled.shape[1]):
-            vals[i,j,0] = f(diff_scaled[i,j,0])
-            vals[i,j,1] = f(diff_scaled[i,j,1])
+    # Multiply the two 1D factors to get the 2D B-spline basis.
+    return np.prod(f_vals, axis=2)
 
-    return np.prod(vals, axis=2) #we multiply the two 1D B-splines to get the 2D B-spline
 
 def vectorized_bspline_gradient(centers, half_extents, points):
     """
-    Compute the gradient of the quadratic B-spline basis functions in a vectorized way.
-    centers: (N, d) array for N nodes.
+    Compute the gradient of the quadratic B-spline basis functions in 2D.
+    centers: (N, 2) array for N nodes.
     half_extents: (N,) array (each = size/2).
-    points: (P, d) array of evaluation points.
-    Returns: (N, P, d) array where [i, p, k] is the k-th component of the gradient
+    points: (P, 2) array of evaluation points.
+    Returns: (N, P, 2) array where [i, p, k] is the k-th component of the gradient
              of basis_i evaluated at points[p].
     """
-    N, d = centers.shape
-    P = points.shape[0]
-    diff = points[None, :, :] - centers[:, None, :]  # (N, P, d)
-    half_extents_reshaped = half_extents[:, None, None]  # (N, 1, 1)
-    diff_scaled = diff / (2. * half_extents_reshaped)  # (N, P, d)
-    # Compute the 1D factors f(t) = max(0, 1 - t^2) for each dimension.
+    N, d = centers.shape  # assuming d == 2
+    # Compute differences and scale them as before.
+    diff = points[None, :, :] - centers[:, None, :]
+    diff_scaled = diff / (2.0 * half_extents[:, None, None])
 
-    def f(x):
-        #print(x)
-        if x < 0:
-            return f(-x)
-        elif x >= 1.5:
-            return 0.
-        elif x >= 0.5:
-            return (x - 1.5)**2 / 2.
-        else:
-            return - x**2 + 0.75
-    
-    def grad_f(x):
-        if x < 0:
-            return - grad_f(-x)
-        elif x >= 1.5:
-            return 0.
-        elif x >= 0.5:
-            return x - 1.5
-        else:
-            return - 2 * x
+    # Define vectorized f (as above) for each dimension.
+    abs_diff = np.abs(diff_scaled)
+    f_vals = np.where(
+        abs_diff >= 1.5,
+        0.0,
+        np.where(
+            abs_diff >= 0.5,
+            ((abs_diff - 1.5)**2) / 2.0,
+            -abs_diff**2 + 0.75
+        )
+    )
 
-    grad = np.zeros(diff_scaled.shape)
+    # Define vectorized grad_f.
+    # For x, let s = sign(x) and y = |x|. Then:
+    # if y >= 1.5: 0, if 0.5 <= y < 1.5: y - 1.5, else: -2*y.
+    s = np.sign(diff_scaled)
+    g_vals = np.where(
+        abs_diff >= 1.5,
+        0.0,
+        np.where(
+            abs_diff >= 0.5,
+            abs_diff - 1.5,
+            -2.0 * abs_diff
+        )
+    )
+    grad_f_vals = s * g_vals  # this is grad_f(x) in a vectorized form
 
-    for i in range(diff_scaled.shape[0]):
-        for j in range(diff_scaled.shape[1]):
-                grad[i,j,0] = grad_f(diff_scaled[i,j,0]) * f(diff_scaled[i,j,1]) / (2. * half_extents[i])
-                grad[i,j,1] = f(diff_scaled[i,j,0]) * grad_f(diff_scaled[i,j,1]) / (2. * half_extents[i])
+    # For 2D, the gradient for each node i and point p is given by:
+    # [ grad_f(diff_scaled[i,p,0]) * f(diff_scaled[i,p,1]),
+    #   f(diff_scaled[i,p,0]) * grad_f(diff_scaled[i,p,1]) ]
+    # and we need to divide by (2 * half_extents[i]) for each node.
+    grad = np.empty_like(diff_scaled)
+    # Gradient with respect to x component
+    grad[..., 0] = (grad_f_vals[..., 0] * f_vals[..., 1]) / (2.0 * half_extents[:, None])
+    # Gradient with respect to y component
+    grad[..., 1] = (f_vals[..., 0] * grad_f_vals[..., 1]) / (2.0 * half_extents[:, None])
+
     return grad
