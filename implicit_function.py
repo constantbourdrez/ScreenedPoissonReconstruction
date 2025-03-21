@@ -5,6 +5,8 @@ from octree import Octree
 from b_spline import vectorized_bspline_eval
 from normals import compute_local_PCA
 from utils import plot_octree
+from ply import read_ply
+from compute_field_v import loadV, estimate_surface_area
 
 # ---------------------- Implicit Function Evaluation (Vectorized) ----------------------
 def evaluate_implicit_function(octree, x_levels, nodes_by_depth, eval_points, points, dimension):
@@ -74,12 +76,15 @@ def plot_implicit_function_2D(octree, x_levels, nodes_by_depth, points, dimensio
 def main():
     # Example settings for 2D.
     dimension = 2
-    # Create a 2D ellipse (polygon)
-    t = np.linspace(0, 2 * np.pi, 500)
-    a, b = 10, 5  # Semi-major and semi-minor axes
-    x = a * np.cos(t)
-    y = b * np.sin(t)
-    #points = np.column_stack((x, y))
+    #Create a 2D ellipse (polygon)
+    # t = np.linspace(0, 2 * np.pi, 500)
+    # a, b = 10, 5  # Semi-major and semi-minor axes
+    # x = a * np.cos(t)
+    # y = b * np.sin(t)
+
+
+
+    # points = np.column_stack((x, y))
 
     #points = []
     #points.append(np.array([np.linspace(-1, 1, 100), np.ones(100)]).T)
@@ -88,47 +93,111 @@ def main():
     #points.append(np.array([-np.ones(100), np.linspace(-1, 1, 100)]).T)
     #points = np.concatenate(points)
 
-    #noise = 0.05 * np.random.randn(*points.shape)
-    #points += noise
+    # noise = 0.05 * np.random.randn(*points.shape)
+    # points += noise
 
-    def generate_flower_point_cloud(N=1000, petals=6, noise=0.02):
+    def generate_flower_point_cloud(N=1000, petals=6, noise=0.2):
         """Generate a 2D flower-like point cloud."""
-        
+
         theta = np.linspace(0, 2 * np.pi, N)  # Angles from 0 to 2π
         r = 1 + 0.3 * np.cos(petals * theta)  # Polar function for flower shape
-        
+
         # Convert to Cartesian coordinates
         x = r * np.cos(theta) + np.random.normal(0, noise, N)
         y = r * np.sin(theta) + np.random.normal(0, noise, N)
-        
+
         return x, y
 
-    # Generate and plot the flower point cloud
-    x, y = generate_flower_point_cloud(N=1000, petals=6, noise=0.01)
+    x, y = generate_flower_point_cloud(N=1000, petals=6, noise= 0.01)
     points = np.column_stack((x, y))
+    print(points.shape)
 
     # Compute normals using PCA (assumed to return normals correctly)
-    normals = compute_local_PCA(points, points, radius=2)[1][:, :, 0]
+    normals = compute_local_PCA(points, points, radius=0.2)[1][:, :, 0]
     normals = normals / np.linalg.norm(normals, axis=1, keepdims=True)
 
     bbox_min = 1.5*np.min(points, axis=0)
     bbox_max = 1.5*np.max(points, axis=0)
-    max_depth = 7  # maximum tree depth
+    max_depth = 6# maximum tree depth
     density_threshold = 0.5
-    alpha = 16.          # screening parameter
-
+    alpha = 7.        # screening parameter
+    area = estimate_surface_area(points, k=6)
     # Build the adaptive octree.
     octree = Octree(bbox_min, bbox_max, max_depth, points, density_threshold, dimension)
     octree.adapt()
+    V_field= loadV(octree, alpha, dimension, points, normals, area)
 
     # Build the multilevel system using vectorized operations.
     nodes_by_depth, A_blocks, b_levels = build_multilevel_system(octree, alpha, dimension, points, normals)
 
     # Solve the system using a cascadic strategy.
     x_levels = solve_multilevel_system(A_blocks, b_levels, nodes_by_depth)
+        # Plot the implicit function and the octree structure.
 
-    # Plot the implicit function and the octree structure.
     plot_implicit_function_2D(octree, x_levels, nodes_by_depth, points, dimension, normals)
+
+    noise_eval = False
+    if noise_eval:
+        noises = [0.01, 0.03, 0.05, 0.07]
+        eval_resolution = 100
+        fig, ax = plt.subplots(1, 4, figsize=(12, 6))
+        for i, noise in enumerate(noises):
+            # Generate and plot the flower point cloud
+            x, y = generate_flower_point_cloud(N=1000, petals=6, noise= noise)
+            points = np.column_stack((x, y))
+            print(points.shape)
+
+            # Compute normals using PCA (assumed to return normals correctly)
+            normals = compute_local_PCA(points, points, radius=0.2)[1][:, :, 0]
+            normals = normals / np.linalg.norm(normals, axis=1, keepdims=True)
+
+            bbox_min = 1.5*np.min(points, axis=0)
+            bbox_max = 1.5*np.max(points, axis=0)
+            max_depth = 6# maximum tree depth
+            density_threshold = 0.5
+            alpha = 7.        # screening parameter
+            area = estimate_surface_area(points, k=6)
+            # Build the adaptive octree.
+            octree = Octree(bbox_min, bbox_max, max_depth, points, density_threshold, dimension)
+            octree.adapt()
+            V_field= loadV(octree, alpha, dimension, points, normals, area)
+
+            # Build the multilevel system using vectorized operations.
+            nodes_by_depth, A_blocks, b_levels = build_multilevel_system(octree, alpha, dimension, points, normals)
+
+            # Solve the system using a cascadic strategy.
+            x_levels = solve_multilevel_system(A_blocks, b_levels, nodes_by_depth)
+
+
+        # Evaluate the implicit function and plot the results.
+            # Create evaluation grid.
+            x_min, y_min = 1.5 * np.min(points, axis=0)
+            x_max, y_max = 1.5 * np.max(points, axis=0)
+            xx, yy = np.meshgrid(np.linspace(x_min, x_max, eval_resolution),
+                                np.linspace(y_min, y_max, eval_resolution))
+            grid_points = np.column_stack([xx.ravel(), yy.ravel()])
+
+            # Evaluate the implicit function.
+            implicit_values = evaluate_implicit_function(octree, x_levels, nodes_by_depth, grid_points, points, dimension)
+            implicit_grid = implicit_values.reshape(xx.shape)
+
+            # Plot the implicit function (left) and the point cloud with the octree structure (right).
+
+            # Left: Contour plot of the implicit function.
+            ax[i].contourf(xx, yy, implicit_grid, cmap='viridis', extent=(-10., 10., -10., 10.))
+            ax[i].contour(xx, yy, implicit_grid, levels=[0], colors='red', linestyles='dashed', label='Zero Level Set')
+            ax[i].set_title('Implicit Function for noise = ' + str(noises[i]))
+            ax[i].set_xlabel('X')
+            ax[i].set_ylabel('Y')
+            ax[i].xlim = (-10., 10.)
+            ax[i].ylim = (-10., 10.)
+            ax[i].set_aspect('equal')
+
+        plt.tight_layout()
+        plt.show()
+
+
+
 
 if __name__ == '__main__':
     main()
